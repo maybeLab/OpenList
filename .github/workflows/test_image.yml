@@ -1,0 +1,137 @@
+name: Test Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional image tag. Defaults to branch-shortsha."
+        required: false
+        type: string
+      platforms:
+        description: "Docker platforms to build."
+        required: true
+        default: "linux/amd64,linux/arm64"
+        type: string
+      base_image_tag:
+        description: "Base image tag: base, ffmpeg, aria2, or aio."
+        required: true
+        default: "base"
+        type: choice
+        options:
+          - base
+          - ffmpeg
+          - aria2
+          - aio
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  ARTIFACT_NAME: binaries_docker_test
+  GOPROXY: https://goproxy.cn,direct
+  GOSUMDB: sum.golang.google.cn
+
+jobs:
+  build_binary:
+    name: Build Docker Binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.0"
+
+      - name: Cache Musl
+        id: cache-musl
+        uses: actions/cache@v4
+        with:
+          path: build/musl-libs
+          key: docker-musl-libs-v2
+
+      - name: Download Musl Library
+        if: steps.cache-musl.outputs.cache-hit != 'true'
+        run: bash build.sh prepare docker-multiplatform
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Go binaries
+        run: bash build.sh beta docker-multiplatform
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          overwrite: true
+          path: |
+            build/
+            !build/*.tgz
+            !build/musl-libs/**
+
+  build_image:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+    needs: build_binary
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: build/
+
+      - name: Prepare image metadata
+        id: meta
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          branch="${GITHUB_REF_NAME//\//-}"
+          short_sha="${GITHUB_SHA::8}"
+          tag="${{ inputs.image_tag }}"
+          if [ -z "$tag" ]; then
+            tag="${branch}-${short_sha}"
+          fi
+          echo "image=ghcr.io/${owner}/openlist-test" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.ci
+          push: true
+          build-args: |
+            BASE_IMAGE_TAG=${{ inputs.base_image_tag }}
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          platforms: ${{ inputs.platforms }}
+
+      - name: Print image
+        run: |
+          echo "Image: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}"
