@@ -92,6 +92,15 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
           platforms: linux/amd64
 
+      - name: Make package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            --method PATCH \
+            "/orgs/${{ github.repository_owner }}/packages/container/openlist-test" \
+            -f visibility=public
+
       - name: Print image
         run: |
           echo "Image: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
