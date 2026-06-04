@@ -13,12 +13,12 @@ on:
       platforms:
         description: "Docker platforms to build."
         required: true
-        default: "linux/amd64,linux/arm64"
+        default: "linux/amd64"
         type: string
       base_image_tag:
         description: "Base image tag: base, ffmpeg, aria2, or aio."
         required: true
-        default: "base"
+        default: "ffmpeg"
         type: choice
         options:
           - base
@@ -36,8 +36,6 @@ permissions:
 
 env:
   ARTIFACT_NAME: binaries_docker_test
-  GOPROXY: https://goproxy.cn,direct
-  GOSUMDB: sum.golang.google.cn
 
 jobs:
   build_binary:
@@ -129,11 +127,11 @@ jobs:
           file: Dockerfile.ci
           push: true
           build-args: |
-            BASE_IMAGE_TAG=${{ inputs.base_image_tag || 'base' }}
+            BASE_IMAGE_TAG=${{ inputs.base_image_tag || 'ffmpeg' }}
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:${{ github.sha }}
-          platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
+          platforms: ${{ inputs.platforms || 'linux/amd64' }}
 
       - name: Print image
         run: |
