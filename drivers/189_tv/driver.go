@@ -232,7 +232,62 @@ func (y *Cloud189TV) Rename(ctx context.Context, srcObj model.Obj, newName strin
 	if err != nil {
 		return nil, err
 	}
-	return newObj, nil
+	return normalizeRenameObj(srcObj, newObj, newName), nil
+}
+
+func normalizeRenameObj(srcObj, newObj model.Obj, newName string) model.Obj {
+	switch src := srcObj.(type) {
+	case *Cloud189File:
+		file, ok := newObj.(*Cloud189File)
+		if !ok {
+			file = &Cloud189File{}
+		}
+		if file.ID == "" {
+			file.ID = src.ID
+		}
+		if file.Name == "" {
+			file.Name = newName
+		}
+		if file.Size == 0 {
+			file.Size = src.Size
+		}
+		if file.Md5 == "" {
+			file.Md5 = src.Md5
+		}
+		if time.Time(file.LastOpTime).IsZero() {
+			file.LastOpTime = src.LastOpTime
+		}
+		if time.Time(file.CreateDate).IsZero() {
+			file.CreateDate = src.CreateDate
+		}
+		if file.Icon.SmallUrl == "" {
+			file.Icon = src.Icon
+		}
+		return file
+	case *Cloud189Folder:
+		folder, ok := newObj.(*Cloud189Folder)
+		if !ok {
+			folder = &Cloud189Folder{}
+		}
+		if folder.ID == "" {
+			folder.ID = src.ID
+		}
+		if folder.Name == "" {
+			folder.Name = newName
+		}
+		if folder.ParentID == 0 {
+			folder.ParentID = src.ParentID
+		}
+		if time.Time(folder.LastOpTime).IsZero() {
+			folder.LastOpTime = src.LastOpTime
+		}
+		if time.Time(folder.CreateDate).IsZero() {
+			folder.CreateDate = src.CreateDate
+		}
+		return folder
+	default:
+		return newObj
+	}
 }
 
 func (y *Cloud189TV) Copy(ctx context.Context, srcObj, dstDir model.Obj) error {
