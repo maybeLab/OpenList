@@ -3,7 +3,6 @@ package smb
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"net"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/OpenListTeam/OpenList/v4/pkg/singleflight"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 
 	"github.com/cloudsoda/go-smb2"
@@ -27,13 +25,6 @@ func (d *SMB) cleanLastConnTime() {
 
 func (d *SMB) getLastConnTime() time.Time {
 	return time.Unix(atomic.LoadInt64(&d.lastConnTime), 0)
-}
-
-func (d *SMB) initFS(ctx context.Context) error {
-	_, err, _ := singleflight.AnyGroup.Do(fmt.Sprintf("SMB.initFS:%p", d), func() (any, error) {
-		return nil, d._initFS(ctx)
-	})
-	return err
 }
 
 func (d *SMB) _initFS(ctx context.Context) error {
