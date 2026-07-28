@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
@@ -16,15 +15,15 @@ import (
 )
 
 func (d *SMB) updateLastConnTime() {
-	atomic.StoreInt64(&d.lastConnTime, time.Now().Unix())
+	d.lastConnTime.Store(time.Now().Unix())
 }
 
 func (d *SMB) cleanLastConnTime() {
-	atomic.StoreInt64(&d.lastConnTime, 0)
+	d.lastConnTime.Store(0)
 }
 
 func (d *SMB) getLastConnTime() time.Time {
-	return time.Unix(atomic.LoadInt64(&d.lastConnTime), 0)
+	return time.Unix(d.lastConnTime.Load(), 0)
 }
 
 func (d *SMB) _initFS(ctx context.Context) error {
