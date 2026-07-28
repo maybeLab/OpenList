@@ -18,6 +18,31 @@ if [[ "$*" == *"lite"* ]]; then
   useLite=true
 fi
 
+defaultDockerPlatforms="linux/amd64,linux/arm64,linux/386,linux/arm/v6,linux/arm/v7,linux/ppc64le,linux/riscv64,linux/loong64"
+dockerPlatforms="${DOCKER_PLATFORMS:-$defaultDockerPlatforms}"
+dockerPlatforms="${dockerPlatforms//[[:space:]]/}"
+
+DockerPlatformEnabled() {
+  case ",$dockerPlatforms," in
+    *",$1,"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+ValidateDockerPlatforms() {
+  local requested_platforms platform
+  IFS=',' read -r -a requested_platforms <<< "$dockerPlatforms"
+  for platform in "${requested_platforms[@]}"; do
+    case "$platform" in
+      linux/amd64|linux/arm64|linux/386|linux/arm/v6|linux/arm/v7|linux/ppc64le|linux/riscv64|linux/loong64) ;;
+      *)
+        echo "Error: unsupported Docker platform: $platform"
+        return 1
+        ;;
+    esac
+  done
+}
+
 if [ "$1" = "dev" ]; then
   version="dev"
   webVersion="rolling"
@@ -214,12 +239,28 @@ BuildDocker() {
 }
 
 PrepareBuildDockerMusl() {
+  local platform_compiler platform compiler url lib_tgz
+  ValidateDockerPlatforms
   mkdir -p build/musl-libs
   BASE="https://github.com/OpenListTeam/musl-compilers/releases/latest/download/"
-  FILES=(x86_64-linux-musl-cross aarch64-linux-musl-cross i486-linux-musl-cross armv6-linux-musleabihf-cross armv7l-linux-musleabihf-cross riscv64-linux-musl-cross powerpc64le-linux-musl-cross loongarch64-linux-musl-cross) ## Disable s390x-linux-musl-cross builds
-  for i in "${FILES[@]}"; do
-    url="${BASE}${i}.tgz"
-    lib_tgz="build/${i}.tgz"
+  PLATFORM_COMPILERS=(
+    "linux/amd64:x86_64-linux-musl-cross"
+    "linux/arm64:aarch64-linux-musl-cross"
+    "linux/386:i486-linux-musl-cross"
+    "linux/arm/v6:armv6-linux-musleabihf-cross"
+    "linux/arm/v7:armv7l-linux-musleabihf-cross"
+    "linux/riscv64:riscv64-linux-musl-cross"
+    "linux/ppc64le:powerpc64le-linux-musl-cross"
+    "linux/loong64:loongarch64-linux-musl-cross"
+  )
+  for platform_compiler in "${PLATFORM_COMPILERS[@]}"; do
+    platform=${platform_compiler%%:*}
+    compiler=${platform_compiler#*:}
+    if ! DockerPlatformEnabled "$platform"; then
+      continue
+    fi
+    url="${BASE}${compiler}.tgz"
+    lib_tgz="build/${compiler}.tgz"
     curl -fsSL -o "${lib_tgz}" "${url}"
     tar xf "${lib_tgz}" --strip-components 1 -C build/musl-libs
     rm -f "${lib_tgz}"
@@ -227,6 +268,7 @@ PrepareBuildDockerMusl() {
 }
 
 BuildDockerMultiplatform() {
+  ValidateDockerPlatforms
   go mod download
 
   # run PrepareBuildDockerMusl before build
@@ -242,6 +284,10 @@ BuildDockerMultiplatform() {
     cgo_cc=${CGO_ARGS[$i]}
     os=${os_arch%%-*}
     arch=${os_arch##*-}
+    platform="$os/$arch"
+    if ! DockerPlatformEnabled "$platform"; then
+      continue
+    fi
     build_tags=$(GetBuildTagsForTarget "$os_arch")
     export GOOS=$os
     export GOARCH=$arch
@@ -259,6 +305,9 @@ BuildDockerMultiplatform() {
   for i in "${!DOCKER_ARM_ARCHES[@]}"; do
     docker_arch=${DOCKER_ARM_ARCHES[$i]}
     cgo_cc=${CGO_ARGS[$i]}
+    if ! DockerPlatformEnabled "$docker_arch"; then
+      continue
+    fi
     export GOARM=${GO_ARM[$i]}
     export CC=${cgo_cc}
     echo "building for $docker_arch"
