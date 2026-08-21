@@ -445,8 +445,8 @@ type RenameResp struct {
 	ResCode     any    `json:"res_code"` // int or string
 }
 
-func (r *RenameResp) toFile(f *Cloud189File) *Cloud189File {
-	return &Cloud189File{
+func (r *RenameResp) toFile(f *Cloud189File, newName string) *Cloud189File {
+	file := &Cloud189File{
 		ID:         r.ID,
 		Name:       r.Name,
 		Size:       r.Size,
@@ -455,14 +455,49 @@ func (r *RenameResp) toFile(f *Cloud189File) *Cloud189File {
 		CreateDate: r.CreateDate,
 		Icon:       f.Icon,
 	}
+	if file.ID == "" {
+		file.ID = f.ID
+	}
+	if file.Name == "" {
+		file.Name = newName
+	}
+	if file.Size == 0 {
+		file.Size = f.Size
+	}
+	if file.Md5 == "" {
+		file.Md5 = f.Md5
+	}
+	if time.Time(file.LastOpTime).IsZero() {
+		file.LastOpTime = f.LastOpTime
+	}
+	if time.Time(file.CreateDate).IsZero() {
+		file.CreateDate = f.CreateDate
+	}
+	return file
 }
 
-func (r *RenameResp) toFolder() *Cloud189Folder {
-	return &Cloud189Folder{
+func (r *RenameResp) toFolder(f *Cloud189Folder, newName string) *Cloud189Folder {
+	folder := &Cloud189Folder{
 		ID:         r.ID,
 		Name:       r.Name,
 		ParentID:   r.ParentID,
 		LastOpTime: r.LastOpTime,
 		CreateDate: r.CreateDate,
 	}
+	if folder.ID == "" {
+		folder.ID = f.ID
+	}
+	if folder.Name == "" {
+		folder.Name = newName
+	}
+	if folder.ParentID == 0 {
+		folder.ParentID = f.ParentID
+	}
+	if time.Time(folder.LastOpTime).IsZero() {
+		folder.LastOpTime = f.LastOpTime
+	}
+	if time.Time(folder.CreateDate).IsZero() {
+		folder.CreateDate = f.CreateDate
+	}
+	return folder
 }

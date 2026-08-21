@@ -915,6 +915,24 @@ func (y *Cloud189PC) FastUpload(ctx context.Context, dstDir model.Obj, file mode
 	return y.fastUpload(ctx, dstDir, file, up, isFamily, overwrite, generateTorrent)
 }
 
+func validUploadProgress(progress *UploadProgress) bool {
+	return progress != nil && strings.TrimSpace(progress.UploadInfo.Data.UploadFileID) != ""
+}
+
+func getOrInitUploadProgress(progress *UploadProgress, cached bool, init func() (*UploadProgress, error)) (*UploadProgress, error) {
+	if cached && validUploadProgress(progress) {
+		return progress, nil
+	}
+	progress, err := init()
+	if err != nil {
+		return nil, err
+	}
+	if !validUploadProgress(progress) {
+		return nil, errors.New("initMultiUpload returned empty uploadFileId")
+	}
+	return progress, nil
+}
+
 func (y *Cloud189PC) fastUpload(ctx context.Context, dstDir model.Obj, file model.FileStreamer, up driver.UpdateProgress, isFamily bool, overwrite bool, generateTorrent bool) (model.Obj, error) {
 	var (
 		cache = file.GetFile()
@@ -1016,9 +1034,9 @@ func (y *Cloud189PC) fastUpload(ctx context.Context, dstDir model.Obj, file mode
 		fullUrl += "/person"
 	}
 
-	// 尝试恢复进度
-	uploadProgress, ok := base.GetUploadProgress[*UploadProgress](y, y.getTokenInfo().SessionKey, fileMd5Hex)
-	if !ok {
+	// 尝试恢复进度。旧缓存缺少 uploadFileId 时不可恢复，必须重新初始化。
+	cachedProgress, ok := base.GetUploadProgress[*UploadProgress](y, y.getTokenInfo().SessionKey, fileMd5Hex)
+	uploadProgress, err := getOrInitUploadProgress(cachedProgress, ok, func() (*UploadProgress, error) {
 		// step.2 预上传
 		params := Params{
 			"parentFolderId": dstDir.GetID(),
@@ -1032,16 +1050,19 @@ func (y *Cloud189PC) fastUpload(ctx context.Context, dstDir model.Obj, file mode
 			params.Set("familyId", y.FamilyID)
 		}
 		var uploadInfo InitMultiUploadResp
-		_, err = y.request(fullUrl+"/initMultiUpload", http.MethodGet, func(req *resty.Request) {
+		_, initErr := y.request(fullUrl+"/initMultiUpload", http.MethodGet, func(req *resty.Request) {
 			req.SetContext(ctx)
 		}, params, &uploadInfo, isFamily)
-		if err != nil {
-			return nil, err
+		if initErr != nil {
+			return nil, initErr
 		}
-		uploadProgress = &UploadProgress{
+		return &UploadProgress{
 			UploadInfo:  uploadInfo,
 			UploadParts: partInfos,
-		}
+		}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	uploadInfo := uploadProgress.UploadInfo.Data
@@ -1083,7 +1104,7 @@ func (y *Cloud189PC) fastUpload(ctx context.Context, dstDir model.Obj, file mode
 			})
 		}
 		if err = threadG.Wait(); err != nil {
-			if errors.Is(err, context.Canceled) {
+			if errors.Is(err, context.Canceled) && validUploadProgress(uploadProgress) {
 				uploadProgress.UploadParts = utils.SliceFilter(uploadProgress.UploadParts, func(s string) bool { return s != "" })
 				base.SaveUploadProgress(y, uploadProgress, y.getTokenInfo().SessionKey, fileMd5Hex)
 			}

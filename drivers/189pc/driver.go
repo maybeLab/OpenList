@@ -316,9 +316,9 @@ func (y *Cloud189PC) Rename(ctx context.Context, srcObj model.Obj, newName strin
 
 	switch f := srcObj.(type) {
 	case *Cloud189File:
-		return resp.toFile(f), nil
+		return resp.toFile(f, newName), nil
 	case *Cloud189Folder:
-		return resp.toFolder(), nil
+		return resp.toFolder(f, newName), nil
 	}
 	return nil, errs.NotSupport
 }

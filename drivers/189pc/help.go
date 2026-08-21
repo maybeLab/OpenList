@@ -15,6 +15,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -101,7 +102,13 @@ func MustParseTime(str string) *time.Time {
 
 type Time time.Time
 
-func (t *Time) UnmarshalJSON(b []byte) error { return t.Unmarshal(b) }
+func (t *Time) UnmarshalJSON(b []byte) error {
+	value, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return t.Unmarshal([]byte(value))
+}
 func (t *Time) UnmarshalXML(e *xml.Decoder, ee xml.StartElement) error {
 	b, err := e.Token()
 	if err != nil {
@@ -116,9 +123,16 @@ func (t *Time) UnmarshalXML(e *xml.Decoder, ee xml.StartElement) error {
 }
 func (t *Time) Unmarshal(b []byte) error {
 	bs := strings.Trim(string(b), "\"")
+	bs = strings.NewReplacer("\u202f", " ", "\u00a0", " ").Replace(bs)
+	bs = strings.Join(strings.Fields(bs), " ")
 	var v time.Time
 	var err error
-	for _, f := range []string{"2006-01-02 15:04:05 -07", "Jan 2, 2006 15:04:05 PM -07"} {
+	for _, f := range []string{
+		"2006-01-02 15:04:05 -07",
+		"Jan 2, 2006 15:04:05 PM -07",
+		"Jan 2, 2006, 3:04:05 PM -07",
+		"Jan 2, 2006 3:04:05 PM -07",
+	} {
 		v, err = time.ParseInLocation(f, bs+" +08", time.Local)
 		if err == nil {
 			break
