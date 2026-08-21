@@ -323,8 +323,10 @@ func (d *Crypt) MakeDir(ctx context.Context, parentDir model.Obj, dirName string
 }
 
 func (d *Crypt) Move(ctx context.Context, srcObj, dstDir model.Obj) error {
-	_, err := fs.Move(ctx, srcObj.GetPath(), dstDir.GetPath())
-	return err
+	return d.runWithThumbnailSync(ctx, thumbnailMove, srcObj, dstDir, "", func() error {
+		_, err := fs.Move(ctx, srcObj.GetPath(), dstDir.GetPath())
+		return err
+	})
 }
 
 func (d *Crypt) Rename(ctx context.Context, srcObj model.Obj, newName string) error {
@@ -338,12 +340,16 @@ func (d *Crypt) Rename(ctx context.Context, srcObj model.Obj, newName string) er
 	} else {
 		newEncryptedName = d.cipher.EncryptFileName(newName)
 	}
-	return op.Rename(ctx, remoteStorage, remoteActualPath, newEncryptedName)
+	return d.runWithThumbnailSync(ctx, thumbnailRename, srcObj, nil, newName, func() error {
+		return op.Rename(ctx, remoteStorage, remoteActualPath, newEncryptedName)
+	})
 }
 
 func (d *Crypt) Copy(ctx context.Context, srcObj, dstDir model.Obj) error {
-	_, err := fs.Copy(ctx, srcObj.GetPath(), dstDir.GetPath())
-	return err
+	return d.runWithThumbnailSync(ctx, thumbnailCopy, srcObj, dstDir, "", func() error {
+		_, err := fs.Copy(ctx, srcObj.GetPath(), dstDir.GetPath())
+		return err
+	})
 }
 
 func (d *Crypt) Remove(ctx context.Context, obj model.Obj) error {
@@ -351,7 +357,37 @@ func (d *Crypt) Remove(ctx context.Context, obj model.Obj) error {
 	if err != nil {
 		return err
 	}
-	return op.Remove(ctx, remoteStorage, remoteActualPath)
+	return d.runWithThumbnailSync(ctx, thumbnailRemove, obj, nil, "", func() error {
+		return op.Remove(ctx, remoteStorage, remoteActualPath)
+	})
+}
+
+func (d *Crypt) runWithThumbnailSync(ctx context.Context, action thumbnailSyncAction, srcObj, dstDir model.Obj, newName string, mainOperation func() error) error {
+	return d.runWithThumbnailSyncOps(ctx, action, srcObj, dstDir, newName, mainOperation, defaultThumbnailSyncOps{})
+}
+
+func (d *Crypt) runWithThumbnailSyncOps(ctx context.Context, action thumbnailSyncAction, srcObj, dstDir model.Obj, newName string, mainOperation func() error, ops thumbnailSyncOps) error {
+	if err := mainOperation(); err != nil {
+		return err
+	}
+	d.syncThumbnailBestEffortWithOps(ctx, action, srcObj, dstDir, newName, ops)
+	return nil
+}
+
+func (d *Crypt) syncThumbnailBestEffortWithOps(ctx context.Context, action thumbnailSyncAction, srcObj, dstDir model.Obj, newName string, ops thumbnailSyncOps) {
+	if err := d.syncThumbnail(ctx, action, srcObj, dstDir, newName, ops); err != nil {
+		destination := srcObj.GetPath()
+		if dstDir != nil {
+			destination = dstDir.GetPath()
+		} else if action == thumbnailRename {
+			destination = stdpath.Join(stdpath.Dir(srcObj.GetPath()), newName)
+		}
+		log.WithFields(log.Fields{
+			"operation":   action,
+			"source":      srcObj.GetPath(),
+			"destination": destination,
+		}).WithError(err).Warn("failed to sync crypt thumbnail")
+	}
 }
 
 func (d *Crypt) Put(ctx context.Context, dstDir model.Obj, streamer model.FileStreamer, up driver.UpdateProgress) error {
