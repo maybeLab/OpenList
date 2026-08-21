@@ -7,7 +7,9 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/offline_download/tool"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/internal/setting"
+	"github.com/OpenListTeam/OpenList/v4/internal/thumbnail"
 	"github.com/OpenListTeam/tache"
+	log "github.com/sirupsen/logrus"
 )
 
 func taskFilterNegative(num int) int64 {
@@ -18,6 +20,9 @@ func taskFilterNegative(num int) int64 {
 }
 
 func InitTaskManager() {
+	if err := thumbnail.Initialize(); err != nil {
+		log.Warnf("failed to initialize thumbnail tasks: %v", err)
+	}
 	fs.UploadTaskManager = tache.NewManager[*fs.UploadTask](tache.WithWorks(setting.GetInt(conf.TaskUploadThreadsNum, conf.Conf.Tasks.Upload.Workers)), tache.WithMaxRetry(conf.Conf.Tasks.Upload.MaxRetry)) //upload will not support persist
 	op.RegisterSettingChangingCallback(func() {
 		fs.UploadTaskManager.SetWorkersNumActive(taskFilterNegative(setting.GetInt(conf.TaskUploadThreadsNum, conf.Conf.Tasks.Upload.Workers)))

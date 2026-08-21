@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/fs"
@@ -146,7 +147,9 @@ func (d *Crypt) List(ctx context.Context, dir model.Obj, args model.ListArgs) ([
 			Mask:     mask &^ model.Temp,
 			// discarding hash as it's encrypted
 		}
-		if !d.Thumbnail || !strings.HasPrefix(args.ReqPath, "/") {
+		objType := utils.GetObjType(name, obj.IsDir())
+		if !d.Thumbnail || !strings.HasPrefix(args.ReqPath, "/") ||
+			(objType != conf.IMAGE && objType != conf.VIDEO) {
 			result = append(result, objRes)
 			continue
 		}

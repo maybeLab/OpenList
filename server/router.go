@@ -116,6 +116,12 @@ func Init(e *gin.Engine) {
 }
 
 func admin(g *gin.RouterGroup) {
+	thumbnail := g.Group("/thumbnail")
+	thumbnail.POST("/task/create", handles.CreateThumbnailTask)
+	thumbnail.POST("/task/scan", handles.ScanThumbnailTask)
+	thumbnail.GET("/task/detail", handles.GetThumbnailTaskDetail)
+	thumbnail.GET("/capabilities", handles.GetThumbnailCapabilities)
+
 	meta := g.Group("/meta")
 	meta.GET("/list", handles.ListMetas)
 	meta.GET("/get", handles.GetMeta)

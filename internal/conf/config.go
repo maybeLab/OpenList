@@ -73,6 +73,7 @@ type TasksConfig struct {
 	Move               TaskConfig `json:"move" envPrefix:"MOVE_"`
 	Decompress         TaskConfig `json:"decompress" envPrefix:"DECOMPRESS_"`
 	DecompressUpload   TaskConfig `json:"decompress_upload" envPrefix:"DECOMPRESS_UPLOAD_"`
+	Thumbnail          TaskConfig `json:"thumbnail" envPrefix:"THUMBNAIL_"`
 	AllowRetryCanceled bool       `json:"allow_retry_canceled" env:"ALLOW_RETRY_CANCELED"`
 }
 
@@ -220,6 +221,9 @@ func DefaultConfig(dataDir string) *Config {
 			DecompressUpload: TaskConfig{
 				Workers:  5,
 				MaxRetry: 2,
+			},
+			Thumbnail: TaskConfig{
+				Workers: 2,
 			},
 			AllowRetryCanceled: false,
 		},
