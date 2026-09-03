@@ -184,7 +184,7 @@ func (y *Cloud189TV) getFiles(ctx context.Context, fileId string, isFamily bool)
 	}
 	fullUrl += "/listFiles.action"
 
-    pageSize := 130  // 每一页返回的文件数量
+	pageSize := 130 // 每一页返回的文件数量
 	res := make([]model.Obj, 0, 130)
 	for pageNum := 1; ; pageNum++ {
 		var resp Cloud189FilesResp
@@ -219,24 +219,27 @@ func (y *Cloud189TV) getFiles(ctx context.Context, fileId string, isFamily bool)
 		if resp.FileListAO.Count == 0 {
 			break
 		}
-		
-		FolderCount := len(resp.FileListAO.FolderList) // 当前文件夹总数
-        FileCount := len(resp.FileListAO.FileList) // 当前文件总数
-        PageCount := FolderCount + FileCount // 当前页数总数
 
-		for i := 0; i < FolderCount; i++ {
+		folderCount := len(resp.FileListAO.FolderList) // 当前文件夹总数
+		fileCount := len(resp.FileListAO.FileList)     // 当前文件总数
+		pageCount := folderCount + fileCount           // 当前页数总数
+
+		for i := 0; i < folderCount; i++ {
 			res = append(res, &resp.FileListAO.FolderList[i])
 		}
-		for i := 0; i < FileCount; i++ {
+		for i := 0; i < fileCount; i++ {
 			res = append(res, &resp.FileListAO.FileList[i])
 		}
-		
 		// 文件数量小于设定数量时跳出
-		if PageCount < pageSize {
-            break
-        }
+		if !hasMoreFiles(pageCount, pageSize) {
+			break
+		}
 	}
 	return res, nil
+}
+
+func hasMoreFiles(pageCount, pageSize int) bool {
+	return pageCount >= pageSize
 }
 
 func (y *Cloud189TV) login() (err error) {
