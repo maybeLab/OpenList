@@ -4,7 +4,42 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/OpenListTeam/OpenList/v4/drivers/base"
 )
+
+func TestUploadProgressRecoveryWithExtensionKeys(t *testing.T) {
+	d := &Cloud189PC{}
+	keys := uploadProgressKeys(t.Name(), "same-md5", "video.mp4")
+	otherKeys := uploadProgressKeys(t.Name(), "same-md5", "video.mkv")
+	if !base.SaveUploadProgress(d, uploadProgressWithID(""), keys...) {
+		t.Fatal("could not cache invalid progress")
+	}
+	if _, ok := base.GetUploadProgress[*UploadProgress](d, otherKeys...); ok {
+		t.Fatal("different extensions shared progress")
+	}
+	cached, ok := base.GetUploadProgress[*UploadProgress](d, keys...)
+	if !ok {
+		t.Fatal("progress missing under original extension key")
+	}
+	calls := 0
+	got, err := getOrInitUploadProgress(cached, ok, func() (*UploadProgress, error) {
+		calls++
+		return uploadProgressWithID("reinitialized-id"), nil
+	})
+	if err != nil || calls != 1 || got.UploadInfo.Data.UploadFileID != "reinitialized-id" {
+		t.Fatalf("recovery = %v, calls=%d, err=%v", got, calls, err)
+	}
+	base.SaveUploadProgress(d, got, keys...)
+	cached, ok = base.GetUploadProgress[*UploadProgress](d, keys...)
+	reused, err := getOrInitUploadProgress(cached, ok, func() (*UploadProgress, error) {
+		t.Fatal("valid resumed progress must not be initialized again")
+		return nil, nil
+	})
+	if err != nil || reused != got {
+		t.Fatalf("resume = %v, err=%v", reused, err)
+	}
+}
 
 func uploadProgressWithID(id string) *UploadProgress {
 	progress := &UploadProgress{}

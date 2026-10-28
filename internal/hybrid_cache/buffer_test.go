@@ -3,6 +3,7 @@ package hybrid_cache_test
 import (
 	"errors"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/hybrid_cache"
@@ -96,5 +97,49 @@ func TestBufferStore(t *testing.T) {
 				t.Errorf("BufferStore.ReadAt() error = %v", err)
 			}
 		})
+	}
+}
+
+// Expanding the block table must not race with active download workers.
+func TestBufferStoreConcurrentGrowth(t *testing.T) {
+	bs := &hybrid_cache.BufferStore{}
+	defer bs.Close()
+	bs.Append(make([]byte, 4))
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for worker := range 4 {
+		wg.Go(func() {
+			<-start
+			for range 200 {
+				data := []byte{byte(worker)}
+				if _, err := bs.WriteAt(data, int64(worker)); err != nil {
+					t.Error(err)
+					return
+				}
+				got := make([]byte, 1)
+				if _, err := bs.ReadAt(got, int64(worker)); err != nil {
+					t.Error(err)
+					return
+				}
+				if got[0] != data[0] {
+					t.Errorf("worker %d: got %v, want %v", worker, got, data)
+					return
+				}
+			}
+		})
+	}
+	wg.Go(func() {
+		<-start
+		for size := int64(5); size <= 204; size++ {
+			if err := bs.GrowTo(size); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	})
+	close(start)
+	wg.Wait()
+	if got := bs.Size(); got != 204 {
+		t.Fatalf("size = %d, want 204", got)
 	}
 }

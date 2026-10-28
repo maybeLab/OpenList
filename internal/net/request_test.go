@@ -156,13 +156,17 @@ func TestHighConcurrency(t *testing.T) {
 	if err := readCloser.Close(); err != nil {
 		t.Errorf("expect no error on close, got %v", err)
 	}
+	var remaining uint32
 	for range 100 {
 		time.Sleep(10 * time.Millisecond)
-		if d.ConcurrencyLimit.Limit == concurrencyLimit {
+		d.ConcurrencyLimit.mu.Lock()
+		remaining = d.ConcurrencyLimit.Limit
+		d.ConcurrencyLimit.mu.Unlock()
+		if remaining == concurrencyLimit {
 			return
 		}
 	}
-	t.Errorf("expect concurrency limit to be %v, got %v", concurrencyLimit, d.ConcurrencyLimit.Limit)
+	t.Errorf("expect concurrency limit to be %v, got %v", concurrencyLimit, remaining)
 }
 
 func init() {
