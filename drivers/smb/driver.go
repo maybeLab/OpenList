@@ -3,6 +3,7 @@ package smb
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"path"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
+	"github.com/OpenListTeam/OpenList/v4/pkg/http_range"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 
 	"github.com/cloudsoda/go-smb2"
@@ -96,20 +98,29 @@ func (d *SMB) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (*m
 		return nil, err
 	}
 	d.updateLastConnTime()
-	mFile := &stream.RateLimitFile{
-		File:    remoteFile,
-		Limiter: stream.ServerDownloadLimit,
-		Ctx:     ctx,
-	}
 	needRelease = false
 	return &model.Link{
-		RangeReader: stream.GetRangeReaderFromMFile(file.GetSize(), mFile),
+		RangeReader: newSMBRangeReader(file.GetSize(), remoteFile),
 		SyncClosers: utils.NewSyncClosers(remoteFile, utils.CloseFunc(func() error {
 			release()
 			return nil
 		})),
 		RequireReference: true,
 	}, nil
+}
+
+func newSMBRangeReader(size int64, file model.File) *model.FileRangeReader {
+	return &model.FileRangeReader{
+		RangeReaderIF: stream.RangeReaderFunc(func(ctx context.Context, r http_range.Range) (io.ReadCloser, error) {
+			// Cached links share the file, but each range owns its cancellation context.
+			limited := &stream.RateLimitFile{
+				File:    file,
+				Limiter: stream.ServerDownloadLimit,
+				Ctx:     ctx,
+			}
+			return stream.GetRangeReaderFromMFile(size, limited).RangeRead(ctx, r)
+		}),
+	}
 }
 
 func (d *SMB) MakeDir(ctx context.Context, parentDir model.Obj, dirName string) error {
