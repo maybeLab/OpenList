@@ -95,6 +95,36 @@ func TestThumbnailPathEncryption(t *testing.T) {
 	}
 }
 
+func TestThumbnailDirectoryWebPUsesSelfPreviewPath(t *testing.T) {
+	parent := "/albums/2026/.thumbnails"
+	name := "photo.jpg.webp"
+
+	if !isThumbnailDirectory(parent) {
+		t.Fatal("thumbnail directory was not recognized")
+	}
+	got := thumbnailPreviewPath(parent, name)
+	wantPath := stdpath.Join(parent, name)
+	if got != wantPath {
+		t.Errorf("preview path = %q, want %q", got, wantPath)
+	}
+	if strings.Contains(got, ".thumbnails/.thumbnails") || strings.Contains(got, ".webp.webp") {
+		t.Errorf("preview path incorrectly points to a derived thumbnail: %q", got)
+	}
+}
+
+func TestThumbnailDirectoryRecognition(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/.thumbnails":                 true,
+		"/albums/2026/.thumbnails":     true,
+		"/albums/.thumbnails/children": false,
+		"/albums/thumbnails":           false,
+	} {
+		if got := isThumbnailDirectory(path); got != want {
+			t.Errorf("isThumbnailDirectory(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
 func TestSyncThumbnailActions(t *testing.T) {
 	d := newThumbnailTestCrypt(t)
 	srcParent := stdpath.Join(d.RemotePath, d.cipher.EncryptDirName("source"))

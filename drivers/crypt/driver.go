@@ -148,25 +148,45 @@ func (d *Crypt) List(ctx context.Context, dir model.Obj, args model.ListArgs) ([
 			// discarding hash as it's encrypted
 		}
 		objType := utils.GetObjType(name, obj.IsDir())
+		if d.Thumbnail && isThumbnailDirectory(args.ReqPath) && !obj.IsDir() && utils.Ext(name) == "webp" {
+			result = append(result, &model.ObjThumb{
+				Object: *objRes,
+				Thumbnail: model.Thumbnail{
+					Thumbnail: d.thumbnailPreviewURL(ctx, args.ReqPath, name),
+				},
+			})
+			continue
+		}
 		if !d.Thumbnail || !strings.HasPrefix(args.ReqPath, "/") ||
 			(objType != conf.IMAGE && objType != conf.VIDEO) {
 			result = append(result, objRes)
 			continue
 		}
-		thumbPath := stdpath.Join(args.ReqPath, ".thumbnails", name+".webp")
-		thumb := fmt.Sprintf("%s/d%s?sign=%s",
-			common.GetApiUrl(ctx),
-			utils.EncodePath(thumbPath, true),
-			sign.Sign(thumbPath))
 		result = append(result, &model.ObjThumb{
 			Object: *objRes,
 			Thumbnail: model.Thumbnail{
-				Thumbnail: thumb,
+				Thumbnail: d.thumbnailPreviewURL(ctx, stdpath.Join(args.ReqPath, ".thumbnails"), name+".webp"),
 			},
 		})
 	}
 
 	return result, nil
+}
+
+func isThumbnailDirectory(path string) bool {
+	return stdpath.Base(utils.FixAndCleanPath(path)) == ".thumbnails"
+}
+
+func (d *Crypt) thumbnailPreviewURL(ctx context.Context, parentPath, name string) string {
+	thumbnailPath := thumbnailPreviewPath(parentPath, name)
+	return fmt.Sprintf("%s/d%s?sign=%s",
+		common.GetApiUrl(ctx),
+		utils.EncodePath(thumbnailPath, true),
+		sign.Sign(thumbnailPath))
+}
+
+func thumbnailPreviewPath(parentPath, name string) string {
+	return stdpath.Join(parentPath, name)
 }
 
 func (a Addition) GetRootPath() string {
