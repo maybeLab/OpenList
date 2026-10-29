@@ -50,10 +50,10 @@ ValidateDockerPlatforms() {
 
 if [ "$1" = "dev" ]; then
   version="dev"
-  webVersion="rolling"
+  webVersion="${frontendReleaseTag:-edge}"
 elif [ "$1" = "beta" ]; then
   version="beta"
-  webVersion="rolling"
+  webVersion="${frontendReleaseTag:-edge}"
 else
   git tag -d beta || true
   # Always true if there's no tag
@@ -127,7 +127,7 @@ AssertStaticBinary() {
 }
 
 FetchWebRolling() {
-  pre_release_json=$(eval "curl -fsSL --max-time 2 $githubAuthArgs -H \"Accept: application/vnd.github.v3+json\" \"https://api.github.com/repos/$frontendRepo/releases/tags/edge\"")
+  pre_release_json=$(eval "curl -fsSL --max-time 2 $githubAuthArgs -H \"Accept: application/vnd.github.v3+json\" \"https://api.github.com/repos/$frontendRepo/releases/tags/$webVersion\"")
   pre_release_assets=$(echo "$pre_release_json" | jq -r '.assets[].browser_download_url')
   
   # There is no lite for rolling
